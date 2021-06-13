@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>part2</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  <script
+    type="text/javascript"
+    src="//code.jquery.com/jquery-1.9.1.js"
+    
+  ></script>
+  
+  <script
+    type="text/javascript"
+    src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"
+    
+  ></script>
+
+    <link rel="stylesheet" type="text/css" href="/css/result-light.css">
+
+
+  <style id="compiled-css" type="text/css">
+      
+    button {
+      position: absolute;
+      left: 350px;
+       top: 800px;
+}
+  </style>
+
+  <script id="insert"></script>
+
+
+</head>
+<body>
+<button onclick="lsFit()">Generate</button>
+    <canvas id="grid" width=1000 height=1000></canvas>
+	
+    <script type="text/javascript">//<![CDATA[
+/*
+ * This script is used to fit the highlighted points with 
+ * a circle by the least square-based gradient descent method.
+ 
+ * Input: the positions of selected points
+ * Output: the cicle that fits the points
+ */
+ 
+/*
+ * initialize global variables
+ */
+var canvas=document.getElementById('grid');
+var rect = canvas.getBoundingClientRect();
+var ctx = document.getElementById('grid').getContext('2d');
+var nrows = 20; //number of rows of the grid
+var ncols = 20; //number of columns of the grid
+var width = 10; //the width  of the square
+var gap = 40 //the distance between 2 squares in the same row
+var maxInt = 100000; // a large integer
+var positionX = []; // array to store the x coordinates of the selected points
+var positionY = []; //array to store the y coordinates of the selected points
+
+//the main functions
+setBackground();
+canvas.addEventListener('mousedown',handleClickPoints);
+
+
+/*
+ * Below is the helper function Area
+ */
+ 
+/*
+ *set the grids of grey square as the background 
+ */
+ function setBackground() {
+	 ctx.fillStyle = "rgb(128,128,128)";
+	    ctx.beginPath();    
+	    for (var x = 0, i = 0; i < nrows; x+=gap, i++) {
+	        for (var y = 0, j = 0; j < ncols; y+=gap, j++) { 
+	            ctx.rect (x, y, width, width);
+	        }
+	    }
+	    ctx.fill();
+	    ctx.closePath();
+}
+
+/*
+ * Turn the grid that is closest to the clicked positions 
+ * to blue and store the x and y positions to arrays
+ */
+function handleClickPoints(e) {
+	var x = e.clientX - rect.left; //access the clicked position
+	var y = e.clientY - rect.top;
+	
+	var xidx = Math.trunc(x / gap); //the starting indices to find the closest grids
+	var yidx = Math.trunc(y / gap);
+	
+	var minDis = maxInt; // store the distance of the closest grid
+	var minI = 0; //store the indices of the closest grid
+	var minJ = 0
+	
+	//find the grid that's the closest to the clicked position
+	for (var i = xidx ; i < xidx + 2; i++) {
+        for (var j = yidx ; j < yidx + 2; j++) { 
+            d = EuclerianDis(i*gap,j*gap,x,y);
+            if (d < minDis) {
+            	minDis = d;
+            	minI = i;
+            	minJ = j;
+            }
+        }
+    }
+	
+	//highlight the clost grid
+	ctx.fillStyle = "rgb(0,0,255)";
+	ctx.beginPath(); 
+	ctx.rect(minI*gap, minJ*gap, width, width);
+	ctx.fill();
+	ctx.closePath(); 
+	
+	//store the positions with the center of the grid
+	positionX.push(minI*gap+width/2);
+	positionY.push(minJ*gap+width/2);
+}
+
+/*
+ * calculate the distance between x1,y1,x2,y2
+ */
+function EuclerianDis(x1,y1,x2,y2) {
+	 var dx = x1 - x2;
+	 var dy = y1 - y2;
+	 return Math.sqrt(dx * dx + dy * dy);
+}
+
+/*
+ * draw the blue circle with the center and radius 
+ */
+function circle(centerx,centery,radius) {
+	ctx.beginPath();
+    ctx.arc(centerx, centery, radius,0, Math.PI*2);
+    ctx.strokeStyle = '#000080';
+    ctx.stroke();
+    ctx.closePath();
+}
+
+ /*
+ * Fitting algorithm goal: Get the cicle fitted with the highlighted points.
+ 
+ * Objective function:the sum of distances between all selected points to
+ * the edge of the circle. 
+ 
+ * Parameters of the objective function: coordinates of the center and the radius 
+ * for the circle
+ 
+ * Optimize method: gradient descent to update the parameters and minimize the 
+ * objective function.
+ 
+ * Input: the x,y coordinates of all selected grids
+ * Output: the fit circle
+ */
+ function lsFit() {
+	 //initalize parameters
+	 centerx = getAvg(positionX);
+	 centery = getAvg(positionY);
+	 radius = initialRadius(centerx, centery);
+	 var sumDis = sumDistanceToEdge(centerx,centery,radius)
+	 var iter = 0 //5 iterations always return a good circle in this grid
+	 var alpha = 0.1 //the speed for changing the parameteres
+	 
+	 while (sumDis > 0.0001 && iter < 5) {
+		 //update the parameters by gradients
+		 gradients = calculateGradient(centerx,centery,radius)
+		 centerx -= alpha* gradients[1]
+		 centery -= alpha* gradients[2]
+		 radius -= alpha* gradients[0]
+		 
+		 sumDis = sumDistanceToEdge(centerx,centery,radius)
+		 iter += 1
+	 }
+	 circle(centerx,centery,radius);
+ }
+
+/*
+ * get the derivative of the objective function for the parameters.
+ * The detailed deduction is in readme.md 
+ */
+ function calculateGradient(centerx,centery,radius){
+	 var gradientCx = 0;
+	 var gradientCy = 0;
+	 var gradientR = 0;
+	 for(var i = 0; i < positionX.length; i++) {
+	     var d = EuclerianDis(centerx,centery,positionX[i],positionY[i]);
+	     gradientR += 2*(radius-d)
+	     gradientCx += 2*(radius-d)*(positionX[i]-centerx)/d
+	     gradientCy += 2*(radius-d)*(positionY[i]-centery)/d
+	 }
+	 return [gradientR,gradientCx,gradientCy];
+ }
+ 
+ /*
+ * The sum of distances between all selected points and the edge
+ */
+ function sumDistanceToEdge(centerx,centery,radius) {
+	 var total = 0
+	 for(var i = 0; i < positionX.length; i++) {
+	     var d = EuclerianDis(centerx,centery,positionX[i],positionY[i]);
+	     if (d <= radius) {
+		    	var dEdge = radius - d;
+		    } else {
+		    	var dEdge = d - radius;
+		    } 
+	     total = total + dEdge;
+	 }
+	 return total
+ }
+ 
+ /*
+ * the initalRadius: derivative of the objective function/derivative radius = 0
+ */
+ function initialRadius(centerx, centery) {
+	 var total = 0
+	 for(var i = 0; i < positionX.length; i++) {
+	     total += EuclerianDis(centerx,centery,positionX[i],positionY[i]);
+	 }
+	 return total/positionX.length
+ }
+	 
+/*
+ * average of the 1d array
+ */
+ function getAvg(arr) {
+	 var total = 0;
+	 for(var i = 0; i < arr.length; i++) {
+	     total += arr[i];
+	 }
+	 return total / arr.length;
+ }
+  //]]></script>
+
+  <script>
+    // tell the embed parent frame the height of the content
+    if (window.parent && window.parent.parent){
+      window.parent.parent.postMessage(["resultsFrame", {
+        height: document.body.getBoundingClientRect().height,
+        slug: "H9XeN"
+      }], "*")
+    }
+
+    // always overwrite window.name, in case users try to set it manually
+    window.name = "result"
+  </script>
+
+
+</body>
+</html>

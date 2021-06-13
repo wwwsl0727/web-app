@@ -1,0 +1,323 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>part1</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="googlebot" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  <script
+    type="text/javascript"
+    src="//code.jquery.com/jquery-1.9.1.js"
+    
+  ></script>
+  
+  <script
+    type="text/javascript"
+    src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"
+    
+  ></script>
+
+    <link rel="stylesheet" type="text/css" href="/css/result-light.css">
+
+
+  <style id="compiled-css" type="text/css">
+      
+    /* EOS */
+  </style>
+
+  <script id="insert"></script>
+
+
+</head>
+<body>
+    <canvas id="grid" width=1000 height=1000>
+
+    <script type="text/javascript">//<![CDATA[
+
+/*
+* This script is used for drawing a cicle whose center is the click of the mouse
+* and radius is set by dragging. Then, the points that are close to the
+* edge in a contious single line style are highlighted. Finally, 2 circles 
+* correspond to the largest and smallest radius of the highlighted points
+* are drawed.
+*/
+  
+/*
+ * initialize global variables
+ */
+var canvas=document.getElementById('grid');
+var rect = canvas.getBoundingClientRect();
+var ctx = document.getElementById('grid').getContext('2d');
+var nrows = 20; //number of rows of the grid
+var ncols = 20; //number of columns of the grid
+var width = 10; //the width  of the square
+var gap = 40  //the distance between 2 squares in the same row
+var maxInt = 10000; // a large integer
+var centerx = 0; //the center of the circle
+var centery = 0;
+var radius = 0; // the radius of the circle
+var distances = new Array(nrows); //this array store the distance of all grids to the center
+var labels = new Array(nrows); // this array stores the labels of the grids
+for (var i = 0; i < nrows; i++) {
+	distances[i] = new Array(ncols);
+	labels[i] = new Array(ncols);	
+}
+
+
+/*
+ * main function
+ */
+ setBackground();
+ 
+ /*
+  * Draw 3 circles according to the requirement.
+  */
+ var flagDrawing = false; // flag for whether the circle is drawing
+ drawAll();
+ 
+ 
+/*
+ * Below is the helper function Area
+ */
+  
+/*
+ *set the grids of square as the background 
+ */
+ function setBackground() {
+	 ctx.fillStyle = "rgb(128,128,128)";
+	    ctx.beginPath();    
+	    for (var x = 0, i = 0; i < nrows; x+=gap, i++) {
+	        for (var y = 0, j = 0; j < ncols; y+=gap, j++) { 
+	            ctx.rect (x, y, width, width);
+	        }
+	    }
+	    ctx.fill();
+	    ctx.closePath();
+}
+
+/*
+ * 1. Draw the first circle according to the movement of the mouse
+ * 2. Highlight the points that are close to the edge in a continuous single-line way
+ * 3. Draw 2 circles corresponding to the largest and smallest radius of the 
+ * highlighted points
+ */
+ 
+function drawAll() {
+
+	//get the position of the center of the circle by mouse clicking
+	var putPoint = function(e){
+		centerx = e.clientX - rect.left;
+		centery = e.clientY - rect.top; 
+		flagDrawing = true;
+	}  
+
+	//get the position of the point on the circle
+	var trackRadius = function(e){
+		if (!flagDrawing) {
+			return;
+		}
+		radius = EuclerianDis(e.clientX - rect.left,e.clientY - rect.top) 
+	}
+
+
+	//draw 3 circles
+	var drawCircle = function(e){
+		//draw the first blue circle
+	    circle(radius,'#000080');
+		flagDrawing = false;
+		
+		//get the indices of the square that is closest to the edge as the starting
+		//point for highlighting in highLight function
+		minPos = initializeMatrices();
+
+		Rs = highLight(minPos[0],minPos[1]);
+		circle(Rs[0],'#ff0000');
+		circle(Rs[1],'#ff0000');
+		}
+	canvas.addEventListener('mousedown',putPoint);
+	canvas.addEventListener('mousemove',trackRadius);
+	canvas.addEventListener('mouseup',drawCircle); 
+}
+
+/*
+ * draw the circle with the desired radius and color
+ */
+function circle(radius,color) {
+	ctx.beginPath();
+    ctx.arc(centerx, centery, radius,0, Math.PI*2);
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.closePath();
+}
+
+/*
+ * Initialize the distance matrix and the label matrix.
+ *
+ * Each entry of distance matrix is the closest distance between
+ * the square and the edge. If the entry is not within the candidate
+ * region, the distance is set to the maximum integet
+ *
+ * Each entry of the label matrix is initialized by 0, meaning not highlighted.
+ *
+ * Output: the indices of the square that is closest to the edge
+ */
+function initializeMatrices() {
+	//store the indices of the square that is closest to the edge
+	var minDis = maxInt;
+	var minI = 0;
+	var minJ = 0;
+	 var dEdge = 0;
+	 
+	 //iterate over all squares and set the valid distance in the candidate region
+	 // which is explained in threeDistances function detailedly
+	 for (var x = 0, i = 0; i < nrows; x+=gap, i++) {
+	     for (var y = 0, j = 0; j < ncols; y+=gap, j++) { 
+	    	 ds = threeDistances(x,y);
+	    	 dEdge = ds[0];
+	    	 distances[i][j] = dEdge;
+	    	 labels[i][j] = 0;
+	    	 if (dEdge < minDis) {
+	    			 minDis = dEdge;
+	    			 minI = i;
+	    			 minJ = j;
+	    		 }
+	     }
+	 }
+	 return [minI,minJ]
+
+} 
+
+/*
+ * highlight the squares that are close to the circle
+ * Input: the indices of the grid that are closest to the edge
+ * Output: the smallest and largest radiuses of the highlighted points
+ */
+function highLight(minI,minJ) {
+	 // start with the closest grid
+	var currI = minI;
+	var currJ = minJ;
+	var iter = 0;
+	var innerR = maxInt;
+	var outerR = 0;
+	ctx.fillStyle = "rgb(0,0,255)";
+	ctx.beginPath(); 
+	
+	while (iter<200) {
+	
+		// If all squares in the candidate regions have been searched, break
+		 if (distances[currI][currJ] == maxInt) {
+			break;
+		} 
+		
+		//highlight the current square
+		ctx.rect(gap*currI, gap*currJ, width, width);
+		ctx.fill();
+		
+		//label it as highlighted
+		labels[currI][currJ] = 1
+		
+		//get the distance of the current square and compare with the output radiuses.
+		var dis = threeDistances(gap*currI, gap*currJ);
+		innerR = Math.min(innerR,dis[1]);
+		outerR = Math.max(outerR,dis[2]);
+	    
+		nextPos = findNext(currI,currJ);
+	   
+		currI = nextPos[0];
+		currJ = nextPos[1];
+		iter += 1;
+	}
+	
+	ctx.closePath(); 
+	return [innerR,outerR]
+}
+
+/*
+ * Input: the indices of the current square
+ * Output: the indices of the next square that is close to the edge and not highlighted
+ * The next square is within the 3*3 square regions centered within the current square
+ */
+function findNext(currI,currJ) {
+    var nextMinDis = maxInt;
+    var nextI = 0;
+    var nextJ = 0;
+    for (var i = currI - 1; i < currI + 2; i++) {
+	      for (var j = currJ - 1; j < currJ + 2; j++) { 
+	    	  if (i!=currI && j!=currJ && nextMinDis > distances[i][j]
+	    	  &&labels[i][j]!=1){
+	    		 nextMinDis = distances[i][j];
+	    		 nextI = i;
+	    		 nextJ = j;
+	    	 }  
+	     } 
+	}  
+	return [nextI,nextJ];
+}  
+
+/*
+ * the Euclerian distance between the input point and the center of the circle
+ */
+ function EuclerianDis(x,y) {
+	 var dx = x - centerx;
+	 var dy = y - centery;
+	 return Math.sqrt(dx * dx + dy * dy);
+ }
+ 
+ /*
+ * The x positions of candidate regions for highlighted points are within the range 
+ * [centerx - radius - gap - width,centerx + radius + gap + width]. The y positions
+ * similar.
+ * Output: closest distance of the input point to edge, 
+ * closest distance to the center,
+ * longest distance to the center
+ */
+ function threeDistances(x,y) {
+	 //the ranges for the candidated regions for highlighting points
+	 var xmin = centerx - radius - gap - width
+	 var xmax = centerx + radius + gap + width
+	 var ymin = centery - radius - gap - width
+	 var ymax = centery + radius + gap + width
+	 var dEdge = 0;
+	 if (x >= xmin && x <= xmax && y >= ymin && y<= ymax) {
+		 d1 = EuclerianDis(x,y);
+		 d2 = EuclerianDis(x+width,y);
+		 d3 = EuclerianDis(x+width,y+width);
+		 d4 = EuclerianDis(x,y+width)
+		    var dMin = Math.min(d1,d2,d3,d4);
+		    var dMax = Math.max(d1,d2,d3,d4);
+		    if (dMax<=radius) {
+		    	dEdge = radius - dMax
+		    } else if (dMin>radius){
+		    	dEdge = dMin - radius;
+		    } else{
+		    	dEdge = 0;
+		    }
+		    return [dEdge,dMin,dMax];
+		}
+	 else {
+		 return [maxInt,maxInt,maxInt];
+	 }
+ }
+  //]]></script>
+
+  <script>
+    // tell the embed parent frame the height of the content
+    if (window.parent && window.parent.parent){
+      window.parent.parent.postMessage(["resultsFrame", {
+        height: document.body.getBoundingClientRect().height,
+        slug: "H9XeN"
+      }], "*")
+    }
+
+    // always overwrite window.name, in case users try to set it manually
+    window.name = "result"
+  </script>
+
+
+</body>
+</html>
